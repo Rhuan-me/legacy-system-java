@@ -74,6 +74,15 @@ test:
   stage: test
   dependencies:
     - build
+  services:
+    - name: mysql:8.0
+      alias: mysql-db
+      variables:
+        SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-db:3306/CIS"
+        SPRING_DATASOURCE_USERNAME: "root"
+        SPRING_DATASOURCE_PASSWORD: "2706"
+        MYSQL_DATABASE: "CIS"
+        MYSQL_ROOT_PASSWORD: "2706"
   script:
     - echo "🧪 Running Users API unit tests..."
     - mvn $MAVEN_CLI_OPTS test
