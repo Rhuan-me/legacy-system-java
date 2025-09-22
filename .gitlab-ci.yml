@@ -74,17 +74,10 @@ test:
   stage: test
   dependencies:
     - build
-  services:
-    - name: mysql:8.0
-      alias: mysql-db
-      variables:
-        SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-db:3306/CIS"
-        SPRING_DATASOURCE_USERNAME: "root"
-        SPRING_DATASOURCE_PASSWORD: "2706"
-        MYSQL_DATABASE: "CIS"
-        MYSQL_ROOT_PASSWORD: "2706"
+  # O serviço MySQL foi removido, pois os testes de unidade não precisam dele.
   script:
     - echo "🧪 Running Users API unit tests..."
+    # O comando de teste permanece o mesmo, mas agora não tentará se conectar a um BD.
     - mvn $MAVEN_CLI_OPTS test
     - echo "✅ All tests passed successfully!"
   artifacts:
@@ -153,11 +146,11 @@ deploy:jdk17:
   script:
     - echo "🚀 Deploying Users API to Maven repository..."
     - if [ ! -f ci_settings.xml ]; then
-      echo "CI settings missing! If deploying to GitLab Maven Repository, please see https://docs.gitlab.com/ee/user/packages/maven_repository/#create-maven-packages-with-gitlab-cicd for instructions.";
-      echo "📦 Creating deployment artifacts instead...";
-      mvn $MAVEN_CLI_OPTS package -DskipTests;
+        echo "CI settings missing! If deploying to GitLab Maven Repository, please see https://docs.gitlab.com/ee/user/packages/maven_repository/#create-maven-packages-with-gitlab-cicd for instructions.";
+        echo "📦 Creating deployment artifacts instead...";
+        mvn $MAVEN_CLI_OPTS package -DskipTests;
       else
-      mvn $MAVEN_CLI_OPTS deploy --settings ci_settings.xml;
+        mvn $MAVEN_CLI_OPTS deploy --settings ci_settings.xml;
       fi
     - echo "✅ Deployment process completed!"
   artifacts:
