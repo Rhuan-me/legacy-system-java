@@ -1,31 +1,10 @@
-# To contribute improvements to CI/CD templates, please follow the Development guide at:
-# https://docs.gitlab.com/development/cicd/templates/
-# This specific template is located at:
-# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Maven.gitlab-ci.yml
-
-# Build JAVA applications using Apache Maven (http://maven.apache.org)
-# For docker image tags see https://hub.docker.com/_/maven/
-#
-# For general lifecycle information see https://maven.apache.org/guides/introduction/introduction-to-the-lifecycle.html
-
-# This template will build and test your projects
-# * Caches downloaded dependencies and plugins between invocation.
-# * Verify but don't deploy merge requests.
-# * Deploy built artifacts from master branch only.
-
+# GitLab CI/CD Pipeline para Users API com MySQL
 variables:
-  # `showDateTime` will show the passed time in milliseconds. You need to specify `--batch-mode` to make this work.
   MAVEN_OPTS: >-
     -Dhttps.protocols=TLSv1.2
     -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
     -Dorg.slf4j.simpleLogger.showDateTime=true
     -Djava.awt.headless=true
-
-  # As of Maven 3.3.0 instead of this you MAY define these options in `.mvn/maven.config` so the same config is used
-  # when running from the command line.
-  # As of Maven 3.6.1, the use of `--no-tranfer-progress` (or `-ntp`) suppresses download and upload messages. The use
-  # of the `Slf4jMavenTransferListener` is no longer necessary.
-  # `installAtEnd` and `deployAtEnd` are only effective with recent version of the corresponding plugins.
   MAVEN_CLI_OPTS: >-
     --batch-mode
     --errors
@@ -35,49 +14,70 @@ variables:
     -DinstallAtEnd=true
     -DdeployAtEnd=true
 
-# This template uses Maven 3 and OpenJDK 17 (LTS) for Users API project
-# for verifying and deploying images
-# Maven 3.8.x REQUIRES HTTPS repositories.
-# See https://maven.apache.org/docs/3.8.1/release-notes.html#how-to-fix-when-i-get-a-http-repository-blocked for more.
 image: maven:3-openjdk-17
 
-# Cache downloaded dependencies and plugins between builds.
-# To share the same cache between branches, but separate them by job: add 'key: "$CI_JOB_NAME"'
-# Be aware that `mvn deploy` will install the built jar into this repository. If you notice your cache size
-# increasing, consider adding `-Dmaven.install.skip=true` to `MAVEN_OPTS` or in `.mvn/maven.config`
 cache:
   paths:
     - .m2/repository
 
-# Define pipeline stages for Users API
 stages:
   - build
   - test
   - verify
   - deploy
 
-# Build stage - compile the Users API project
 build:
   stage: build
   script:
-    - echo "🔍 Building Users API project..."
+    - echo "Building Users API project..."
     - mvn $MAVEN_CLI_OPTS clean compile
-    - echo "✅ Build completed successfully!"
+    - echo "Build completed successfully!"
   artifacts:
     expire_in: 1 hour
     paths:
       - target/classes/
     when: always
 
-# Test stage - run all unit tests with coverage
+# Test stage com MySQL service
 test:
   stage: test
+  services:
+    - name: mysql:8.0
+      alias: mysql
+      command: ["--default-authentication-plugin=mysql_native_password"]
+  variables:
+    # MySQL service configuration
+    MYSQL_ROOT_PASSWORD: "rootpassword"
+    MYSQL_DATABASE: "CIS"
+    MYSQL_USER: "root"
+    MYSQL_PASSWORD: "rootpassword"
+
+    # Aguardar MySQL estar pronto
+    MYSQL_INITDB_SKIP_TZINFO: "1"
   dependencies:
     - build
+  before_script:
+    # Instalar cliente MySQL e aguardar o serviço estar pronto
+    - apt-get update -qq && apt-get install -y -qq default-mysql-client
+    - echo "Aguardando MySQL estar disponível..."
+    # Aguardar até que possamos conectar ao MySQL
+    - |
+      for i in {1..30}; do
+        if mysql -h mysql -u root -prootpassword -e "SELECT 1" >/dev/null 2>&1; then
+          echo "MySQL está pronto!"
+          break
+        fi
+        echo "MySQL ainda não está pronto, tentativa $i/30..."
+        sleep 2
+      done
+    # Criar o banco de dados CIS se não existir
+    - mysql -h mysql -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS CIS;"
+    - mysql -h mysql -u root -prootpassword -e "SHOW DATABASES;"
+    - echo "Banco CIS criado/verificado com sucesso!"
   script:
-    - echo "🧪 Running Users API unit tests..."
+    - echo "Executando testes da Users API com MySQL..."
     - mvn $MAVEN_CLI_OPTS test
-    - echo "✅ All tests passed successfully!"
+    - echo "Todos os testes passaram com sucesso!"
   artifacts:
     expire_in: 1 day
     paths:
@@ -89,22 +89,19 @@ test:
     when: always
   coverage: '/Total.*?([0-9]{1,3})%/'
 
-# For merge requests do not `deploy` but only run `verify`.
-# See https://maven.apache.org/guides/introduction/introduction-to-the-lifecycle.html
 .verify:
   stage: verify
   dependencies:
     - build
     - test
   script:
-    - echo "📋 Verifying Users API without deployment..."
-    - mvn $MAVEN_CLI_OPTS verify
-    - echo "✅ Verification completed successfully!"
+    - echo "Verificando Users API sem deployment..."
+    - mvn $MAVEN_CLI_OPTS verify -DskipTests
+    - echo "Verificação concluída com sucesso!"
   except:
     variables:
       - $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# Verify merge requests using JDK17
 verify:jdk17:
   extends:
     - .verify
@@ -114,27 +111,22 @@ verify:jdk17:
       - target/*.jar
     when: on_success
 
-# Package application for all branches
 package:
   stage: verify
   dependencies:
     - build
     - test
   script:
-    - echo "📦 Packaging Users API application..."
+    - echo "Empacotando aplicação Users API..."
     - mvn $MAVEN_CLI_OPTS package -DskipTests
-    - echo "✅ Application packaged successfully!"
-    - ls -la target/*.jar || echo "No JAR files found"
+    - echo "Aplicação empacotada com sucesso!"
+    - ls -la target/*.jar || echo "Nenhum arquivo JAR encontrado"
   artifacts:
     expire_in: 1 week
     paths:
       - target/*.jar
     when: on_success
 
-# To deploy packages from CI, create a `ci_settings.xml` file
-# For deploying packages to GitLab's Maven Repository: See https://docs.gitlab.com/ee/user/packages/maven_repository/#create-maven-packages-with-gitlab-cicd for more details.
-# Please note: The GitLab Maven Repository is currently only available in GitLab Premium / Ultimate.
-# For `master` or `main` branch run `mvn deploy` automatically.
 deploy:jdk17:
   stage: deploy
   dependencies:
@@ -142,15 +134,14 @@ deploy:jdk17:
     - test
     - verify:jdk17
   script:
-    - echo "🚀 Deploying Users API to Maven repository..."
+    - echo "Fazendo deploy da Users API..."
     - if [ ! -f ci_settings.xml ]; then
-      echo "CI settings missing! If deploying to GitLab Maven Repository, please see https://docs.gitlab.com/ee/user/packages/maven_repository/#create-maven-packages-with-gitlab-cicd for instructions.";
-      echo "📦 Creating deployment artifacts instead...";
+      echo "Configurações de CI ausentes! Criando artefatos de deployment...";
       mvn $MAVEN_CLI_OPTS package -DskipTests;
       else
       mvn $MAVEN_CLI_OPTS deploy --settings ci_settings.xml;
       fi
-    - echo "✅ Deployment process completed!"
+    - echo "Processo de deployment concluído!"
   artifacts:
     expire_in: 1 month
     paths:
