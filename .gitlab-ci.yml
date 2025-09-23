@@ -44,39 +44,48 @@ test:
   services:
     - name: mysql:8.0
       alias: mysql
-      command: ["--default-authentication-plugin=mysql_native_password"]
+      command: [
+        "--default-authentication-plugin=mysql_native_password",
+        "--innodb-buffer-pool-size=128M",
+        "--innodb-log-file-size=32M",
+        "--max_connections=50"
+      ]
   variables:
-    # MySQL service configuration
+    # MySQL service configuration - CORRIGIDO
     MYSQL_ROOT_PASSWORD: "rootpassword"
     MYSQL_DATABASE: "CIS"
-    MYSQL_USER: "root"
-    MYSQL_PASSWORD: "rootpassword"
-
-    # Aguardar MySQL estar pronto
+    # Remover MYSQL_USER e MYSQL_PASSWORD quando usar root
     MYSQL_INITDB_SKIP_TZINFO: "1"
+    MYSQL_ROOT_HOST: "%"
   dependencies:
     - build
   before_script:
-    # Instalar cliente MySQL e aguardar o serviço estar pronto
-    - apt-get update -qq && apt-get install -y -qq default-mysql-client
+    # Usar microdnf para instalar MySQL client na imagem Maven baseada em Red Hat
+    - microdnf install mysql
     - echo "Aguardando MySQL estar disponível..."
-    # Aguardar até que possamos conectar ao MySQL
+    # Script melhorado para aguardar MySQL
     - |
-      for i in {1..30}; do
+      for i in {1..60}; do
         if mysql -h mysql -u root -prootpassword -e "SELECT 1" >/dev/null 2>&1; then
           echo "MySQL está pronto!"
           break
         fi
-        echo "MySQL ainda não está pronto, tentativa $i/30..."
+        if [ $i -eq 60 ]; then
+          echo "Timeout: MySQL não ficou disponível em 120 segundos"
+          exit 1
+        fi
+        echo "MySQL ainda não está pronto, tentativa $i/60..."
         sleep 2
       done
-    # Criar o banco de dados CIS se não existir
-    - mysql -h mysql -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS CIS;"
+    # Verificar status do MySQL e criar banco
+    - mysql -h mysql -u root -prootpassword -e "SELECT VERSION();"
+    - mysql -h mysql -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS CIS CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
     - mysql -h mysql -u root -prootpassword -e "SHOW DATABASES;"
+    - mysql -h mysql -u root -prootpassword -e "USE CIS; SHOW TABLES;"
     - echo "Banco CIS criado/verificado com sucesso!"
   script:
     - echo "Executando testes da Users API com MySQL..."
-    - mvn $MAVEN_CLI_OPTS test
+    - mvn $MAVEN_CLI_OPTS test -X
     - echo "Todos os testes passaram com sucesso!"
   artifacts:
     expire_in: 1 day
