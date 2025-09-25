@@ -43,55 +43,53 @@ test:
   stage: test
   services:
     - name: mysql:8.0
-      alias: mysql
-      command: [
-        "--default-authentication-plugin=mysql_native_password",
-        "--innodb-buffer-pool-size=128M",
-        "--innodb-log-file-size=32M",
-        "--max_connections=50"
-      ]
+      alias: mysql # O hostname do serviço será 'mysql'
+      command: ["--default-authentication-plugin=mysql_native_password"]
   variables:
-    # MySQL service configuration - CORRIGIDO
+    # Variáveis para o serviço MySQL
     MYSQL_ROOT_PASSWORD: "rootpassword"
-    MYSQL_DATABASE: "CIS"
-    # Remover MYSQL_USER e MYSQL_PASSWORD quando usar root
+    MYSQL_DATABASE: "CIS" # O serviço MySQL criará este banco automaticamente
     MYSQL_INITDB_SKIP_TZINFO: "1"
-    MYSQL_ROOT_HOST: "%"
+
+    # Variáveis que o Spring Boot usará para se conectar ao banco!
+    SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/CIS?autoReconnect=true&useSSL=false"
+    SPRING_DATASOURCE_USERNAME: "root"
+    SPRING_DATASOURCE_PASSWORD: "$MYSQL_ROOT_PASSWORD" # Reutiliza a variável do MySQL
+
+    # Configuração para o Maven encontrar o banco de dados
+    DB_HOST: "mysql"
+    DB_PORT: "3306"
+
   dependencies:
     - build
   before_script:
-    # Usar microdnf para instalar MySQL client na imagem Maven baseada em Red Hat
-    - microdnf install mysql
-    - echo "Aguardando MySQL estar disponível..."
-    # Script melhorado para aguardar MySQL
+    # O cliente mysql não vem na imagem base, então o instalamos
+    - microdnf install -y mysql
+    - echo "Aguardando o serviço MySQL iniciar..."
+    # Loop de espera mais robusto
     - |
-      for i in {1..60}; do
-        if mysql -h mysql -u root -prootpassword -e "SELECT 1" >/dev/null 2>&1; then
-          echo "MySQL está pronto!"
+      for i in {1..30}; do
+        if mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$SPRING_DATASOURCE_USERNAME" -p"$SPRING_DATASOURCE_PASSWORD" --silent; then
+          echo "✅ Conexão com o MySQL estabelecida com sucesso!"
           break
         fi
-        if [ $i -eq 60 ]; then
-          echo "Timeout: MySQL não ficou disponível em 120 segundos"
+        if [ $i -eq 30 ]; then
+          echo "❌ Timeout: Não foi possível conectar ao MySQL."
           exit 1
         fi
-        echo "MySQL ainda não está pronto, tentativa $i/60..."
+        echo "Tentando conectar ao MySQL ($i/30)..."
         sleep 2
       done
-    # Verificar status do MySQL e criar banco
-    - mysql -h mysql -u root -prootpassword -e "SELECT VERSION();"
-    - mysql -h mysql -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS CIS CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    - mysql -h mysql -u root -prootpassword -e "SHOW DATABASES;"
-    - mysql -h mysql -u root -prootpassword -e "USE CIS; SHOW TABLES;"
-    - echo "Banco CIS criado/verificado com sucesso!"
+    - echo "Verificando banco de dados criado..."
+    - mysql -h "$DB_HOST" -u "$SPRING_DATASOURCE_USERNAME" -p"$SPRING_DATASOURCE_PASSWORD" -e "SHOW DATABASES;"
   script:
-    - echo "Executando testes da Users API com MySQL..."
-    - mvn $MAVEN_CLI_OPTS test -X
-    - echo "Todos os testes passaram com sucesso!"
+    - echo "🧪 Executando os testes da API..."
+    - mvn $MAVEN_CLI_OPTS test
+    - echo "✅ Testes concluídos!"
   artifacts:
     expire_in: 1 day
     paths:
       - target/surefire-reports/
-      - target/site/jacoco/
     reports:
       junit:
         - target/surefire-reports/TEST-*.xml
