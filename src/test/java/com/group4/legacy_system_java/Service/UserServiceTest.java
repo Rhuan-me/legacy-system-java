@@ -24,8 +24,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-
 public class UserServiceTest {
+
     @Mock
     private UserRepository userRepository;
 
@@ -112,5 +112,14 @@ public class UserServiceTest {
         userService.deleteUser("1");
 
         verify(userRepository, times(1)).delete(user);
+    }
+
+    // Novo teste adicionado
+    @Test
+    void deleteUser_WhenUserDoesNotExist_ShouldThrowNotFoundException() {
+        when(userRepository.findById("1")).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class, () -> userService.deleteUser("1"));
+        verify(userRepository, never()).delete(any(User.class));
     }
 }
