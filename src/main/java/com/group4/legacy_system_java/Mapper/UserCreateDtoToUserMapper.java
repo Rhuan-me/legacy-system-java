@@ -3,7 +3,9 @@ package com.group4.legacy_system_java.Mapper;
 import com.group4.legacy_system_java.DTO.UserCreateDTO;
 import com.group4.legacy_system_java.Exception.BadRequestException;
 import com.group4.legacy_system_java.Model.User;
+import org.springframework.stereotype.Component;
 
+@Component
 public class UserCreateDtoToUserMapper {
     public User map(UserCreateDTO userCreateDto) {
         if (userCreateDto == null) {

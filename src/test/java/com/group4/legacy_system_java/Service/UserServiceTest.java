@@ -5,6 +5,8 @@ import com.group4.legacy_system_java.DTO.UserResponseDTO;
 import com.group4.legacy_system_java.DTO.UserUpdateDTO;
 import com.group4.legacy_system_java.Exception.BadRequestException;
 import com.group4.legacy_system_java.Exception.NotFoundException;
+import com.group4.legacy_system_java.Mapper.UserCreateDtoToUserMapper; // Importado
+import com.group4.legacy_system_java.Mapper.UserToUserResponseDtoMapper; // Importado
 import com.group4.legacy_system_java.Model.User;
 import com.group4.legacy_system_java.Repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,12 @@ public class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private UserCreateDtoToUserMapper userCreateDtoToUserMapper;
+
+    @Mock
+    private UserToUserResponseDtoMapper userToUserResponseDtoMapper;
+
     @InjectMocks
     private UserService userService;
 
@@ -44,17 +52,26 @@ public class UserServiceTest {
 
     @Test
     void findAll_ShouldReturnListOfUsers() {
+        UserResponseDTO userResponse = new UserResponseDTO("1", "Test User", "test@example.com");
         when(userRepository.findAll()).thenReturn(Collections.singletonList(user));
+        when(userToUserResponseDtoMapper.map(any(User.class))).thenReturn(userResponse); // Mock do mapper
+
         List<UserResponseDTO> result = userService.findAll();
+
         assertFalse(result.isEmpty());
         assertEquals(1, result.size());
         assertEquals("Test User", result.get(0).nome());
+        verify(userToUserResponseDtoMapper, times(1)).map(user);
     }
 
     @Test
     void findUserById_WhenUserExists_ShouldReturnUser() {
+        UserResponseDTO userResponse = new UserResponseDTO("1", "Test User", "test@example.com");
         when(userRepository.findById("1")).thenReturn(Optional.of(user));
+        when(userToUserResponseDtoMapper.map(user)).thenReturn(userResponse);
+
         UserResponseDTO result = userService.findUserById("1");
+
         assertNotNull(result);
         assertEquals("Test User", result.nome());
     }
@@ -68,11 +85,15 @@ public class UserServiceTest {
     @Test
     void createUser_WhenLoginIsUnique_ShouldCreateUser() {
         UserCreateDTO createDTO = new UserCreateDTO("New User", "new@example.com", "password123");
-        when(userRepository.findByLogin(createDTO.login())).thenReturn(Optional.empty());
-        when(passwordEncoder.encode(createDTO.password())).thenReturn("encodedPassword");
+        User userFromMapper = new User(null, "New User", "new@example.com", "password123");
+        User savedUser = new User("2", "New User", "new@example.com", "encodedPassword");
+        UserResponseDTO responseDTO = new UserResponseDTO("2", "New User", "new@example.com");
 
-        User savedUser = new User("2", createDTO.nome(), createDTO.login(), "encodedPassword");
+        when(userRepository.findByLogin(createDTO.login())).thenReturn(Optional.empty());
+        when(userCreateDtoToUserMapper.map(createDTO)).thenReturn(userFromMapper);
+        when(passwordEncoder.encode(createDTO.password())).thenReturn("encodedPassword");
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        when(userToUserResponseDtoMapper.map(savedUser)).thenReturn(responseDTO);
 
         UserResponseDTO result = userService.createUser(createDTO);
 
@@ -93,8 +114,12 @@ public class UserServiceTest {
     @Test
     void updateUser_WhenUserExists_ShouldUpdateUser() {
         UserUpdateDTO updateDTO = new UserUpdateDTO("Updated Name", "updated@example.com", "anyPassword");
+        User updatedUser = new User("1", "Updated Name", "updated@example.com", "encodedPassword");
+        UserResponseDTO responseDTO = new UserResponseDTO("1", "Updated Name", "updated@example.com");
+
         when(userRepository.findById("1")).thenReturn(Optional.of(user));
-        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userRepository.save(any(User.class))).thenReturn(updatedUser);
+        when(userToUserResponseDtoMapper.map(updatedUser)).thenReturn(responseDTO);
 
         UserResponseDTO result = userService.updateUser("1", updateDTO);
 
@@ -114,7 +139,6 @@ public class UserServiceTest {
         verify(userRepository, times(1)).delete(user);
     }
 
-    // Novo teste adicionado
     @Test
     void deleteUser_WhenUserDoesNotExist_ShouldThrowNotFoundException() {
         when(userRepository.findById("1")).thenReturn(Optional.empty());
