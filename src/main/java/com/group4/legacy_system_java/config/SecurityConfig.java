@@ -29,13 +29,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable) // Desabilita CSRF
+                .csrf(AbstractHttpConfigurer::disable) // Desabilita CSRF para APIs
                 .authorizeHttpRequests(auth -> auth
-                        // Permite acesso público aos endpoints do Swagger
-                        .requestMatchers(SWAGGER_WHITELIST).permitAll()
-                        // Permite acesso público à API de usuários (para testes)
-                        .requestMatchers("/api/users/**").permitAll()
-                        // Exige autenticação para qualquer outro endpoint
+                        // Permite acesso público a todos os endpoints listados abaixo
+                        .requestMatchers(
+                                "/api/users/**",      // Endpoints de criação/leitura de usuários
+                                "/api/auth/**",      // Endpoints de login/autenticação
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+                        // Exige autenticação para qualquer outra requisição
                         .anyRequest().authenticated()
                 );
         return http.build();
