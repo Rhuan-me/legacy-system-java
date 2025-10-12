@@ -77,4 +77,15 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("User not found with ID: " + id));
         userRepository.delete(user);
     }
+
+    public UserResponseDTO validateUserCredentials(String login, String password) {
+        User user = userRepository.findByLogin(login)
+                .orElse(null);
+
+        if (user != null && passwordEncoder.matches(password, user.getPassword())) {
+            return userToUserResponseDtoMapper.map(user);
+        }
+        return null;
+    }
+
 }

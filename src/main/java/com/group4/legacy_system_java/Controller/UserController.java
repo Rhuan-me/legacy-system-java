@@ -2,10 +2,12 @@ package com.group4.legacy_system_java.Controller;
 
 
 import com.group4.legacy_system_java.DTO.UserCreateDTO;
+import com.group4.legacy_system_java.DTO.UserLoginDTO;
 import com.group4.legacy_system_java.DTO.UserResponseDTO;
 import com.group4.legacy_system_java.DTO.UserUpdateDTO;
 import com.group4.legacy_system_java.Service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -57,4 +59,15 @@ public class UserController {
         // Retorna status 204 No Content, que é o padrão para exclusões bem-sucedidas
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/login")
+    public ResponseEntity<UserResponseDTO> login(@RequestBody UserLoginDTO userLoginDTO) {
+        UserResponseDTO user = userService.validateUserCredentials(userLoginDTO.login(), userLoginDTO.password());
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
 }
